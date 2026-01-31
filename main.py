@@ -59,14 +59,14 @@ print("Training started...")
 for epoch in range(num_epochs+1):
     # Train Phi Network
     opt_phi.zero_grad()
-    loss_phi_val = phi_loss(phi_net, gen_net, batch_size, device)
+    loss_phi_val = phi_loss(phi_net, gen_net, batch_size, device, d)
     loss_phi_val.backward()
     opt_phi.step()
     scheduler_phi.step()
 
     # Train Generator Network
     opt_G.zero_grad()
-    loss_G_val = gen_loss(phi_net, gen_net, batch_size, device)
+    loss_G_val = gen_loss(phi_net, gen_net, batch_size, device, d)
     loss_G_val.backward()
     opt_G.step()
     scheduler_G.step()
