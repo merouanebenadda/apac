@@ -11,11 +11,11 @@ target = torch.tensor([2.0, 2.0], device=device)
 
 
 # Hyperparameters
-c_speed = 5.0  # Kinetic coefficient of hamiltonian (= max speed)
-gamma_obstacle = 5.0
-weight_goal = 3.0
+c_speed = 8.0  # Kinetic coefficient of hamiltonian (= max speed)
+gamma_obstacle = 5.0  # Obstacle strength
+weight_goal = 1.0
 weight_congestion = 1.0
-nu = 0.1  # Diffusion coefficient
+nu = 0.0  # Diffusion coefficient
 lam = 1.0  # Weight for HJB residual in phi loss
 
 # Cost functions

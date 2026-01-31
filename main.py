@@ -52,13 +52,13 @@ opt_G = optim.Adam(
 
 scheduler_phi = torch.optim.lr_scheduler.StepLR(
     opt_phi,
-    step_size=15000,
+    step_size=25000,
     gamma=0.9
 )
 
 scheduler_G = torch.optim.lr_scheduler.StepLR(
     opt_G,
-    step_size=15000,
+    step_size=25000,
     gamma=0.9
 )
 
