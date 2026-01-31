@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
+
 
 from neural_networks.networks import PhiNet, GenNet, phi_loss, gen_loss, initial_pos_mean
 
@@ -16,7 +16,7 @@ d = 2  # Dimension of the problem
 
 # Training Parameters
 num_epochs = 50000
-batch_size = 512
+batch_size = 128
 print_interval = 500
 
 
@@ -53,13 +53,13 @@ opt_G = optim.Adam(
 scheduler_phi = torch.optim.lr_scheduler.StepLR(
     opt_phi,
     step_size=15000,
-    gamma=0.5
+    gamma=0.9
 )
 
 scheduler_G = torch.optim.lr_scheduler.StepLR(
     opt_G,
     step_size=15000,
-    gamma=0.5
+    gamma=0.9
 )
 
 # Training Networks
@@ -109,7 +109,7 @@ for epoch in range(num_epochs+1):
             ax[0].contourf(GX, GY, Val, levels=[0, 100], colors=['red'], alpha=0.15)
             ax[0].contour(GX, GY, Val, levels=[0], colors='darkred', linewidths=2)
 
-            cmap = cm.get_cmap('coolwarm') # Colormap for time steps
+            cmap = plt.get_cmap('coolwarm') # Colormap for time steps
 
             for i, t_val in enumerate(time_steps):
                 t_batch = torch.ones(num_agents, 1, device=device) * t_val
@@ -125,7 +125,8 @@ for epoch in range(num_epochs+1):
                 ax[0].scatter(x_pred[:, 0], x_pred[:, 1], color=color, s=10, label=lbl)
 
             # Target position
-            ax[0].scatter([2], [0], c='green', marker='x', s=150, linewidth=3, label='Target')
+            ax[0].scatter([2], [2], c='green', marker='x', s=150, linewidth=3, label='Target')
+            
             ax[0].set_xlim(-3, 3); ax[0].set_ylim(-3, 3)
             ax[0].set_title(f"Trajectories (Gradient t=0 to t=1) - Step {epoch}")
             ax[0].legend(loc='upper right')

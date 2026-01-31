@@ -57,6 +57,8 @@ def Hamiltonian(p):
     """
 
     return c_speed * torch.norm(p, p=2, dim=1, keepdim=True)
+
+
 # Neural Networks
 
 class ResBlock(nn.Module):
@@ -131,7 +133,7 @@ def phi_loss(phi_net, gen_net, batch_size, device, d):
 
     z2, _ = sample_batch(batch_size, d, device) # Independent samples for congestion term
 
-    x = gen_net(z, t) # Generated positions at time t
+    x = gen_net(z, t).detach().requires_grad_(True) # Generated positions at time t
 
     x = x.clone().detach().requires_grad_(True)
     t = t.clone().detach().requires_grad_(True)
@@ -177,6 +179,78 @@ def gen_loss(phi_net, gen_net, batch_size, device, d):
     phi = phi_net(x, t)
     grad_phi = torch.autograd.grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
     grad_t = torch.autograd.grad(phi, t, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+
+    lap_phi = 0
+    for i in range(d):
+        grad2 = torch.autograd.grad(grad_phi[:, i], x, grad_outputs=torch.ones_like(grad_phi[:, i]), create_graph=True)[0][:, i]
+        lap_phi += grad2
+    lap_phi = lap_phi.unsqueeze(1)
+
+    kinetic = Hamiltonian(grad_phi)
+
+    f_obst = f_obstacle(x)
+
+    with torch.no_grad():
+        x2 = gen_net(z2, t) # Independent samples for congestion term
+
+    f_cong = F_congestion(x, x2)
+
+    lt_residual = grad_t + nu*lap_phi - kinetic + f_obst + f_cong
+
+    return lt_residual.mean()
+
+def phi_loss(phi_net, gen_net, batch_size, device, d):
+    z, t = sample_batch(batch_size, d, device)
+
+    z2, _ = sample_batch(batch_size, d, device) # Independent samples for congestion term
+
+    # CHANGE: Detach gen_net so we don't update generator weights during phi training [cite: 105, 126]
+    x = gen_net(z, t).detach().requires_grad_(True) # Generated positions at time t
+
+    # x = x.clone().detach().requires_grad_(True) # REMOVED: Redundant since we detached above
+    t = t.clone().detach().requires_grad_(True)
+
+    # Compute gradients and Laplacian of phi
+    phi = phi_net(x, t)
+    grad_phi = torch.autograd.grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+    grad_t = torch.autograd.grad(phi, t, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+
+    lap_phi = 0
+    for i in range(d):
+        grad2 = torch.autograd.grad(grad_phi[:, i], x, grad_outputs=torch.ones_like(grad_phi[:, i]), create_graph=True)[0][:, i]
+        lap_phi += grad2
+    lap_phi = lap_phi.unsqueeze(1)
+
+
+    with torch.no_grad():
+        x2 = gen_net(z2, t) # Independent samples for congestion term
+    f_cong = F_congestion(x, x2)
+
+    kinetic = Hamiltonian(grad_phi)
+
+    lt_residual = grad_t + nu*lap_phi - kinetic
+    l_HJB_residual = lt_residual + f_obstacle(x) + f_cong
+
+    t0 = torch.zeros_like(t)
+    l0 = phi_net(z, t0).mean()
+
+    lt = lt_residual.mean()
+    l_HJB = lam * (l_HJB_residual.norm(dim=1)).mean()
+
+    return l_HJB - (l0 + lt)
+
+
+def gen_loss(phi_net, gen_net, batch_size, device, d):
+    z, t = sample_batch(batch_size, d, device)
+    z2, _ = sample_batch(batch_size, d, device) # Independent samples for congestion term
+
+    x = gen_net(z, t) # Generated positions at time t
+
+    t_ref = t.clone().detach().requires_grad_(True)
+
+    phi = phi_net(x, t_ref)
+    grad_phi = torch.autograd.grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+    grad_t = torch.autograd.grad(phi, t_ref, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
 
     lap_phi = 0
     for i in range(d):
