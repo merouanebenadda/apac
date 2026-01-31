@@ -2,8 +2,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
-from neural_networks.networks import PhiNet, GenNet, phi_loss, gen_loss
+from neural_networks.networks import PhiNet, GenNet, phi_loss, gen_loss, initial_pos_mean
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -18,10 +20,18 @@ batch_size = 512
 print_interval = 500
 
 
+# Visualization Parameters
+num_frames = 64
+num_agents = 100
+
 # Initialize Networks
 
 phi_net = PhiNet(d).to(device)
 gen_net = GenNet(d).to(device)
+
+# Loss histories
+history_phi = []
+history_G = []
 
 # Optimizers
 
@@ -71,7 +81,68 @@ for epoch in range(num_epochs+1):
     opt_G.step()
     scheduler_G.step()
 
+    # Record losses
+    history_phi.append(loss_phi_val.item())
+    history_G.append(loss_G_val.item())
+
     if epoch % print_interval == 0:
         print(f"Epoch [{epoch}/{num_epochs}] | Phi Loss: {loss_phi_val.item():.4f} | Gen Loss: {loss_G_val.item():.4f}")
+
+        # Visualization
+
+        with torch.no_grad():
+            time_steps = torch.linspace(0, 1, num_frames, device=device)
+            
+            z = torch.randn(num_agents, d, device=device)
+            std_dev = 1.0 / np.sqrt(10.0)
+            z = z * std_dev + initial_pos_mean
+
+            fig, ax = plt.subplots(1, 2, figsize=(16, 6))
+
+            # Plot trajectories
+
+            # Obstacle
+            grid_x = np.linspace(-3, 3, 200)
+            grid_y = np.linspace(-3, 3, 200)
+            GX, GY = np.meshgrid(grid_x, grid_y)
+            Val = GY**2 - 5*GX**2 - 0.1
+            ax[0].contourf(GX, GY, Val, levels=[0, 100], colors=['red'], alpha=0.15)
+            ax[0].contour(GX, GY, Val, levels=[0], colors='darkred', linewidths=2)
+
+            cmap = cm.get_cmap('coolwarm') # Colormap for time steps
+
+            for i, t_val in enumerate(time_steps):
+                t_batch = torch.ones(num_agents, 1, device=device) * t_val
+ 
+                x_pred = gen_net(z, t_batch).cpu().numpy() # .cpu() so Matplotlib can handle it
+
+                color = cmap(i / num_frames)
+
+                lbl = None
+                if i == 0: lbl = 'Start (t=0)'
+                elif i == num_frames - 1: lbl = 'End (t=1)'
+
+                ax[0].scatter(x_pred[:, 0], x_pred[:, 1], color=color, s=10, label=lbl)
+
+            # Target position
+            ax[0].scatter([2], [0], c='green', marker='x', s=150, linewidth=3, label='Target')
+            ax[0].set_xlim(-3, 3); ax[0].set_ylim(-3, 3)
+            ax[0].set_title(f"Trajectories (Gradient t=0 to t=1) - Step {epoch}")
+            ax[0].legend(loc='upper right')
+            ax[0].grid(alpha=0.3)
+
+            # Plot loss history
+            ax[1].plot(history_phi, label='Loss Phi (Max)', alpha=0.7, linewidth=1)
+            ax[1].plot(history_G, label='Loss G (Min)', alpha=0.7, linewidth=1)
+            ax[1].set_yscale('symlog')
+            ax[1].set_title("Loss history")
+            ax[1].legend(); ax[1].grid(alpha=0.3)
+
+
+            plt.tight_layout()
+            plt.savefig(f"outputs/training_step_{epoch:05d}.png", dpi=150, bbox_inches='tight')
+                
+
+
 
 print("Training completed.")

@@ -6,7 +6,8 @@ import torch.optim as optim
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Target position and initial distribution
-target = torch.tensor([2.0, 0.0], device=device)
+initial_pos_mean = torch.tensor([-2.0, 0.0], device=device)
+target = torch.tensor([2.0, 2.0], device=device)
 
 
 # Hyperparameters
