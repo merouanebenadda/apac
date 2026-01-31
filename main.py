@@ -15,14 +15,14 @@ print(f"Using device: {device}")
 d = 2  # Dimension of the problem
 
 # Training Parameters
-num_epochs = 50000
+num_epochs = 200000
 batch_size = 128
-print_interval = 500
+print_interval = 2000
 
 
 # Visualization Parameters
 num_frames = 64
-num_agents = 100
+num_agents = 50
 
 # Initialize Networks
 
