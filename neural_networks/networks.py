@@ -14,6 +14,8 @@ c_speed = 5.0  # Kinetic coefficient of hamiltonian (= max speed)
 gamma_obstacle = 5.0
 weight_goal = 1.0
 weight_congestion = 1.0
+nu = 0.1  # Diffusion coefficient
+lam = 1.0  # Weight for HJB residual in phi loss
 
 # Cost functions
 
@@ -23,7 +25,7 @@ def f_obstacle(x):
     """
     matrix = torch.tensor([[5, 0],
                        [0, -1]], device=device)
-    term = torch.relu(-(5.0 * x[:, 0]**2 - 1.0 * x[:, 1]**2) - 0.1 , 0)
+    term = torch.relu(-(5.0 * x[:, 0]**2 - 1.0 * x[:, 1]**2) - 0.1)
 
     return gamma_obstacle*term
 
@@ -46,15 +48,14 @@ def g(x, goal=target):
     return weight_goal * torch.norm(x - goal, p=2, dim=1, keepdim=True)
 
 
-def Hamiltonian(x, p):
+def Hamiltonian(p):
     """
     x: (Batch, 2) tensor
 
     H(x, p) = c * ||p||_2 + f_obstacle(x)
     """
 
-    return c_speed * torch.norm(p, p=2, dim=1, keepdim=True) + f_obstacle(x)
-
+    return c_speed * torch.norm(p, p=2, dim=1, keepdim=True)
 # Neural Networks
 
 class ResBlock(nn.Module):
@@ -111,9 +112,86 @@ class GenNet(nn.Module):
 
         return (1-t)*z + t*self.N(torch.cat([z, t], dim=1))
     
+# Loss Functions
 
-def phi_loss():
-    pass
+def sample_batch(batch_size, d, device):
+    z = torch.randn(batch_size, d, device=device)
 
-def gen_loss():
-    pass
+    # Shift and scale to match initial distribution rho_0
+    std_dev = 1.0 / np.sqrt(10.0)
+    z = z * std_dev
+    z[:, 0] = z[:, 0] - 2.0
+
+    t = torch.rand(batch_size, 1, device=device)
+    return z, t
+
+def phi_loss(phi_net, gen_net, batch_size, device, d):
+    z, t = sample_batch(batch_size, d, device)
+
+    z2, _ = sample_batch(batch_size, d, device) # Independent samples for congestion term
+
+    x = gen_net(z, t) # Generated positions at time t
+
+    x = x.clone().detach().requires_grad_(True)
+    t = t.clone().detach().requires_grad_(True)
+
+    # Compute gradients and Laplacian of phi
+    phi = phi_net(x, t)
+    grad_phi = torch.autograd.grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+    grad_t = torch.autograd.grad(phi, t, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+
+    lap_phi = 0
+    for i in range(d):
+        grad2 = torch.autograd.grad(grad_phi[:, i], x, grad_outputs=torch.ones_like(grad_phi[:, i]), create_graph=True)[0][:, i]
+        lap_phi += grad2
+    lap_phi = lap_phi.unsqueeze(1)
+
+
+    with torch.no_grad():
+        x2 = gen_net(z2, t) # Independent samples for congestion term
+    f_cong = F_congestion(x, x2)
+
+    kinetic = Hamiltonian(grad_phi)
+
+    lt_residual = grad_t + nu*lap_phi - kinetic
+    l_HJB_residual = lt_residual + f_obstacle(x) + f_cong
+
+    t0 = torch.zeros_like(t)
+    l0 = phi_net(z, t0).mean()
+
+    lt = lt_residual.mean()
+    l_HJB = lam * (l_HJB_residual.norm(dim=1)).mean()
+
+    return l_HJB + l0 + lt
+
+
+def gen_loss(phi_net, gen_net, batch_size, device, d):
+    z, t = sample_batch(batch_size, d, device)
+    z2, _ = sample_batch(batch_size, d, device) # Independent samples for congestion term
+
+    x = gen_net(z, t) # Generated positions at time t
+
+    t.requires_grad = True
+
+    phi = phi_net(x, t)
+    grad_phi = torch.autograd.grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+    grad_t = torch.autograd.grad(phi, t, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+
+    lap_phi = 0
+    for i in range(d):
+        grad2 = torch.autograd.grad(grad_phi[:, i], x, grad_outputs=torch.ones_like(grad_phi[:, i]), create_graph=True)[0][:, i]
+        lap_phi += grad2
+    lap_phi = lap_phi.unsqueeze(1)
+
+    kinetic = Hamiltonian(grad_phi)
+
+    f_obst = f_obstacle(x)
+
+    with torch.no_grad():
+        x2 = gen_net(z2, t) # Independent samples for congestion term
+
+    f_cong = F_congestion(x, x2)
+
+    lt_residual = grad_t + nu*lap_phi - kinetic + f_obst + f_cong
+
+    return lt_residual.mean()
