@@ -5,6 +5,10 @@ import torch.optim as optim
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Target position and initial distribution
+target = torch.tensor([2.0, 0.0], device=device)
+
+
 # Hyperparameters
 c_speed = 5.0  # Kinetic coefficient of hamiltonian (= max speed)
 gamma_obstacle = 5.0
@@ -34,7 +38,7 @@ def F_congestion(x, y):
 
     return weight_congestion * torch.mean(interaction)
 
-def g(x, goal):
+def g(x, goal=target):
     """
     x: (Batch, 2) tensor
     goal: (2,) tensor
@@ -106,3 +110,10 @@ class GenNet(nn.Module):
             t = t.unsqueeze(1)
 
         return (1-t)*z + t*self.N(torch.cat([z, t], dim=1))
+    
+
+def phi_loss():
+    pass
+
+def gen_loss():
+    pass
