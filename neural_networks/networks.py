@@ -34,7 +34,7 @@ def F_congestion(x, y):
 
     return weight_congestion * torch.mean(interaction)
 
-def distance_to_goal(x, goal):
+def g(x, goal):
     """
     x: (Batch, 2) tensor
     goal: (2,) tensor
@@ -61,4 +61,48 @@ class ResBlock(nn.Module):
         self.activation = activation
         self.skip_weight = 0.5
 
+    def forward(self, x):
+        residual = x
+        out = self.activation(self.fc1(x))
+        out = self.fc2(out)
+        return self.activation(out * self.skip_weight + residual) 
     
+class ResNet(nn.Module):
+    def __init__(self, in_dim, out_dim, hidden_dim=100, activation=nn.Tanh):
+        super().__init__()
+        self.fc_in = nn.Linear(in_dim, hidden_dim)
+
+        self.block1 = ResBlock(hidden_dim, activation())
+        self.block2 = ResBlock(hidden_dim, activation())
+        self.block3 = ResBlock(hidden_dim, activation())
+        self.fc_out = nn.Linear(hidden_dim, out_dim)
+
+    def forward(self, x):
+        out = self.fc_in(x)
+        out = self.block1(out)
+        out = self.block2(out)
+        out = self.block3(out)
+        out = self.fc_out(out)
+        return out
+    
+class PhiNet(nn.Module):
+    def __init__(self, d, hidden_dim=100):
+        super().__init__()
+        self.N = ResNet(in_dim=d + 1, out_dim=1, hidden_dim=100, activation=nn.Tanh)
+
+    def forward(self, x, t):
+        if t.dim() == 1:
+            t = t.unsqueeze(1)
+        
+        return (1-t)*self.N(torch.cat([x, t], dim=1)) + t*g(x)
+    
+class GenNet(nn.Module):
+    def __init__(self, d, hidden_dim=100):
+        super().__init__()
+        self.N = ResNet(in_dim=d + 1, out_dim=d, hidden_dim=100, activation=nn.ReLU)
+
+    def forward(self, z, t):
+        if t.dim() == 1:
+            t = t.unsqueeze(1)
+
+        return (1-t)*z + t*self.N(torch.cat([z, t], dim=1))
